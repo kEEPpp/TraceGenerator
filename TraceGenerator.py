@@ -587,45 +587,36 @@ class AutoGenerator(TraceModule):
                 noised_value = self.add_noise(value)
                 step.append(noised_value)
             traces.append(step)
-        return traces
-        return self.make_trace_format(*step)
+        
+        #return traces
+        return self.make_trace_format(*traces)
        
     def make_trace_format(self, *args):
         # make recipe step indices only in nonfocus cases
 
         col = ['LOT_ID', 'WAFER_ID', 'PROCESS', 'PROCESS_STEP', 'RECIPE', 'RECIPE_STEP', 'PARAMETER_NAME',
                'PARAMETER_VALUE', 'TIME']
-
+        
         data = []
-        trace_values = np.concatenate(args)
-        for n in range(self.n):
+        for num, trace in enumerate(args):
             df = pd.DataFrame([], columns=col)
-            #df = pd.concat(df)
-            df['PARAMETER_VALUE'] = trace_values[n]
-            df = df.reset_index(drop=True)
-            df['LOT_ID'] = 'lot_a'
-            if self.fault_flag:
-                df['WAFER_ID'] = f'wafer{len(self.param_list)+1}'
-            else:
-                df['WAFER_ID'] = f'wafer{n + 1}' # focus data 항상 n+1 이 부분 변경
+            df.PARAMETER_VALUE = np.concatenate(trace)
+            df['LOT_ID'] = 'lot'
+            df['WAFER_ID'] = f'wafer{num+1}'
             df['PROCESS'] = 'process'
             df['PROCESS_STEP'] = 'process_step'
             df['RECIPE'] = 'recipe'
-            df['RECIPE_STEP'] = np.array(self.recipe_step_index[f'trace{n + 1}']['step_info'], dtype=str)
             df['PARAMETER_NAME'] = 'parameter_name'
-            if self.fault_flag:
-                df['TYPE'] = 'focus'
-            else:
-                df['TYPE'] = 'nonfocus'
+            # step_list = []
+            # for step_num, step in enumerate(single):
+            #     recipe_step = [str(step_num+1)] * len(step)
+            #     step_list.extend(recipe_step)
+            df['RECIPE_STEP'] = [str(step_num+1) for step_num, step in enumerate(trace) for _ in step]
             data.append(df)
-
         data = pd.concat(data)
         data['TIME'] = pd.date_range("2024-01-01", periods=data.shape[0], freq="S")
-        temp_list = []
-        for wafer in data['WAFER_ID'].unique():
-            temp_list.append(data[data['WAFER_ID'] == wafer])
 
-        return temp_list
+        return data
 
 
     def new_function(self):
