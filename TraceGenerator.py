@@ -2,6 +2,7 @@ import inspect
 import os
 import sys
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import random
@@ -472,19 +473,8 @@ class TraceDataGeneration(TraceModule):
 
 class AutoGenerator(TraceModule):
 
-    def __init__(self, n, max_value, min_value, function):
-        self.n = n
-        self.max_value = max_value
-        self.min_value = min_value
-        self.function = function
-        #self.global_noise = (max_value - min_value)
-        self.global_range = (max_value - min_value)
-        self.mean_profiles = self.random_mean(len(function))
-        self.param = self.random_parameter_generation()
-
-    def random_mean(self, step_len=3):
-
-        mean_range = np.random.rand(step_len)
+    def __init__(self, n, m
+        mean_range = np.random.randlen)
         mean_range = (mean_range - np.min(mean_range)) / (np.max(mean_range) - np.min(mean_range))
         mean_range = mean_range * (self.max_value - self.min_value) + self.min_value
 
@@ -587,46 +577,92 @@ class AutoGenerator(TraceModule):
                 noised_value = self.add_noise(value)
                 step.append(noised_value)
             traces.append(step)
-        return traces
-        return self.make_trace_format(*step)
+        
+        #return traces
+        return self.make_trace_format(*traces)
        
     def make_trace_format(self, *args):
         # make recipe step indices only in nonfocus cases
 
         col = ['LOT_ID', 'WAFER_ID', 'PROCESS', 'PROCESS_STEP', 'RECIPE', 'RECIPE_STEP', 'PARAMETER_NAME',
                'PARAMETER_VALUE', 'TIME']
-
+        
         data = []
-        trace_values = np.concatenate(args)
-        for n in range(self.n):
+        for num, trace in enumerate(args):
             df = pd.DataFrame([], columns=col)
-            #df = pd.concat(df)
-            df['PARAMETER_VALUE'] = trace_values[n]
-            df = df.reset_index(drop=True)
-            df['LOT_ID'] = 'lot_a'
-            if self.fault_flag:
-                df['WAFER_ID'] = f'wafer{len(self.param_list)+1}'
-            else:
-                df['WAFER_ID'] = f'wafer{n + 1}' # focus data 항상 n+1 이 부분 변경
+            df.PARAMETER_VALUE = np.concatenate(trace)
+            df['LOT_ID'] = 'lot'
+            df['WAFER_ID'] = f'wafer{num+1}'
             df['PROCESS'] = 'process'
             df['PROCESS_STEP'] = 'process_step'
             df['RECIPE'] = 'recipe'
-            df['RECIPE_STEP'] = np.array(self.recipe_step_index[f'trace{n + 1}']['step_info'], dtype=str)
             df['PARAMETER_NAME'] = 'parameter_name'
-            if self.fault_flag:
-                df['TYPE'] = 'focus'
-            else:
-                df['TYPE'] = 'nonfocus'
+            # step_list = []
+            # for step_num, step in enumerate(single):
+            #     recipe_step = [str(step_num+1)] * len(step)
+            #     step_list.extend(recipe_step)
+            df['RECIPE_STEP'] = [str(step_num+1) for step_num, step in enumerate(trace) for _ in step]
             data.append(df)
-
         data = pd.concat(data)
         data['TIME'] = pd.date_range("2024-01-01", periods=data.shape[0], freq="S")
-        temp_list = []
-        for wafer in data['WAFER_ID'].unique():
-            temp_list.append(data[data['WAFER_ID'] == wafer])
 
-        return temp_list
+        return data
 
+    def trace_checker(self, df):
+        #fname = p.split(os.sep)[-1].split('.')[0]
+        step_list = list(np.sort(np.unique(df.RECIPE_STEP.values)))
+        reset_raw_data, boundary_raw = self.reset_index(df, step_list, True)
+        print(boundary_raw)
+        self.index_sorted_image(reset_raw_data, boundary_raw)
 
-    def new_function(self):
-        pass
+    def reset_index(self, trace, step_list, return_recipe_step_boundary=False):
+        full_trace_list = []
+        for i in trace['WAFER_ID'].unique():
+            d = trace[trace.WAFER_ID == i].reset_index(drop=True)
+            full_trace_list.append(d)
+
+        # step_list = cleaned_data.RECIPE_STEP.unique()
+        col_name = trace.columns.to_list()
+        group_df = trace.groupby('WAFER_ID')
+        recipe_step_index_list = []
+
+        for step_number in step_list:
+            len_max = max((df['RECIPE_STEP'] == step_number).sum() for _, df in group_df)
+            recipe_step_index_list.append(len_max)
+            for key, f in enumerate(full_trace_list):
+                step_length = (f['RECIPE_STEP'] == step_number).sum()
+                if step_length < len_max:
+                    if step_length == 0:
+                        new_index = np.cumsum(recipe_step_index_list)[-1]  # 원래는 -2인데 뭐가 맞지..?
+                    else:
+                        new_index = f[f['RECIPE_STEP'] == step_number].index.values[-1] + 1
+                    for i in range(len_max - step_length):
+                        full_trace_list[key] = pd.DataFrame(np.insert(full_trace_list[key].values,
+                                                                    new_index + i,
+                                                                    values=[np.nan],
+                                                                    axis=0),
+                                                            columns=col_name)
+                        full_trace_list[key].loc[new_index + i, 'RECIPE_STEP'] = step_number
+
+        for key, f in enumerate(full_trace_list):
+            full_trace_list[key] = f.dropna(subset=['WAFER_ID'])
+
+        accumulated_index = np.cumsum(recipe_step_index_list)
+        accumulated_index[-1] = accumulated_index[-1] - 1
+        if return_recipe_step_boundary:
+            return full_trace_list, accumulated_index
+        else:
+            return full_trace_list
+
+    def index_sorted_image(self, reset_raw_data, boundary_raw, path=None):
+        plt.figure(figsize=(12, 6))
+
+        plt.title(f'# of {len(reset_raw_data)} wafer')
+        for wafer in reset_raw_data:
+            plt.plot(wafer.PARAMETER_VALUE, label=None)
+
+        for i in boundary_raw:
+            plt.axvline(i, linestyle='--', alpha=0.3, color='black')
+        if path is not None:
+            plt.savefig(path)
+        plt.show()
