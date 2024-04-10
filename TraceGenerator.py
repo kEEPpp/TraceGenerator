@@ -473,42 +473,8 @@ class TraceDataGeneration(TraceModule):
 
 class AutoGenerator(TraceModule):
 
-    def __init__(self, n, max_value, min_value, function):
-        self.n = n
-        self.max_value = max_value
-        self.min_value = min_value
-        self.function = function
-        
-        self.global_range = (max_value - min_value)
-        self.mean_profiles = self.random_mean(len(function))
-        self.param = self.random_parameter_generation()
-
-    def generate_recipe_step_num(self, num_function):
-        target_recipe_step = random.randint(1, num_function)
-        if target_recipe_step == num_function:
-            return list(np.ones(1) * num_function)
-        
-        result = [] 
-        # 리스트의 길이가 1 이상이고, 원하는 합계가 양수인 경우에만 작동
-        if target_recipe_step <= 0 or num_function <= 0:
-            return result
-        
-        for _ in range(target_recipe_step - 1):
-            # 남은 합계 중에서 랜덤한 숫자를 생성
-            num = random.randint(1, num_function - (target_recipe_step - len(result)))
-            # 리스트에 추가
-            result.append(num)
-            # 합계 업데이트
-            num_function -= num
-        
-        # 마지막 숫자는 남은 합계
-        result.append(num_function)
-        
-        return result
-
-    def random_mean(self, step_len=3):
-
-        mean_range = np.random.rand(step_len)
+    def __init__(self, n, m
+        mean_range = np.random.randlen)
         mean_range = (mean_range - np.min(mean_range)) / (np.max(mean_range) - np.min(mean_range))
         mean_range = mean_range * (self.max_value - self.min_value) + self.min_value
 
@@ -516,7 +482,7 @@ class AutoGenerator(TraceModule):
 
     def generate_length(self):
         # trace_len = samples = np.random.exponential(400, 1000)
-        return max(len(self.function) * 3, np.random.geometric(0.004, 1)[0])
+        return np.random.geometric(0.004, 1)[0]
 
     def generate_boundary(self, trace_length):
 
@@ -527,9 +493,7 @@ class AutoGenerator(TraceModule):
         return trace_section
 
     def generate_value_parameter(self, key, is_values):
-        '''
-        mean profile 값을 기준으로 global range * 0.1 std를 갖는 정규분포에서 start, end, high value 등을 뽑아냄
-        '''
+        global_range = 100
         param_value = np.random.normal(loc=self.mean_profiles[key], scale=self.global_range * 0.1, size=len(is_values))
 
         return param_value
@@ -552,21 +516,6 @@ class AutoGenerator(TraceModule):
 
         return time_target
 
-    def new_function(self):
-        # generate length
-        trace_length = self.generate_length()
-        # generate each length of each trace
-        trace_section = self.generate_boundary(trace_length)
-
-        full_param = []
-
-        for key, f in enumerate(self.function):
-            trace_type = getattr(super(), f)
-            param_list = inspect.signature(trace_type).parameters
-            param_list = list(param_list.keys())
-
-        return param_list
-
     def random_parameter_generation(self):
         # generate length
         trace_length = self.generate_length()
@@ -584,6 +533,9 @@ class AutoGenerator(TraceModule):
             param_dict = dict(zip(param_list, value))
             #print(param_dict)
 
+            # allocate length
+            param_dict['length'] = trace_section[key]
+
             is_values = [s for s in param_list if 'value' in s]
             is_times = [s for s in param_list if 'time' in s]
             # is_coff = [s for s in param_list if 'b' or 'c' in s]
@@ -594,9 +546,6 @@ class AutoGenerator(TraceModule):
             # allocate value parameter
             for v, p in zip(is_values, param_value):
                 param_dict[v] = p
-
-            # allocate length
-            param_dict['length'] = trace_section[key]
 
             # time parameter gen
             time_target = self.generate_time_parameter(is_times, trace_section, key)
