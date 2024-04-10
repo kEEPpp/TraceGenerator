@@ -551,8 +551,39 @@ class AutoGenerator(TraceModule):
             time_target = -1
 
         return time_target
+    
+    def test_random_parameter_generation(self):
+        # make parameter dictionary 
+        param_list = self.generate_trace_parameter()
 
-    def new_function(self):
+        # generate length
+        trace_length = self.generate_length()
+        # generate each length of each trace
+        trace_section = self.generate_boundary(trace_length)
+
+        '''
+        default parameter dictionary 만들고
+
+        for loop 안에서 default dict 순회 하면서 jitter, value variance, noise를 추가하면 되지 않을까?
+
+        gen 부분과 allocation 부분을 어떤 구조로 나누면 좋을까?
+        '''
+    def generate_trace_parameter(self):
+        param_list = []
+        for f in self.function:
+            trace_type = getattr(super(), f)
+            param = inspect.signature(trace_type).parameters
+            param = list(param.keys())
+            value = np.ones(shape=len(param))
+            param = dict(zip(param, value))
+            param_list.append(param)
+            #param_list.append(param)
+        
+        return param_list       
+        
+    
+
+    def test_generat_trace_(self):
         # generate length
         trace_length = self.generate_length()
         # generate each length of each trace
