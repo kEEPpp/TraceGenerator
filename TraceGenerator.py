@@ -1,3 +1,4 @@
+import copy
 import inspect
 import os
 import sys
@@ -481,7 +482,8 @@ class AutoGenerator(TraceModule):
         
         self.global_range = (max_value - min_value)
         self.mean_profiles = self.random_mean(len(function))
-        self.param = self.random_parameter_generation()
+        #self.param = self.random_parameter_generation()
+        self.param = self.default_parameter_generation()
 
     def generate_recipe_step_num(self, num_function):
         target_recipe_step = random.randint(1, num_function)
@@ -526,25 +528,35 @@ class AutoGenerator(TraceModule):
 
         return trace_section
 
-    def generate_value_parameter(self, key, is_values):
+    def generate_value_parameter(self, length, loc_factor, std_factor=0.1):
         '''
         mean profile 값을 기준으로 global range * 0.1 std를 갖는 정규분포에서 start, end, high value 등을 뽑아냄
         '''
-        param_value = np.random.normal(loc=self.mean_profiles[key], scale=self.global_range * 0.1, size=len(is_values))
+        #param_value = np.random.normal(loc=self.mean_profiles[key], scale=self.global_range * std_factor, size=len(is_values))
+        param_value = np.random.normal(loc=loc_factor, scale=self.global_range * std_factor, size=length)
 
         return param_value
 
-    def generate_time_parameter(self, is_times, trace_section, key):
+    def generate_time_parameter(self, key, is_times, trace_section):
         if len(is_times) == 1:
             time_target = np.random.uniform(low=0, high=1)
             time_target = [int(time_target * trace_section[key])]
             # print(time_target)
 
         elif len(is_times) > 1:
-            time_list = np.random.dirichlet(np.ones(len(is_times)))
-            time_list = time_list / np.sum(time_list)
-            time_target = np.array(time_list * trace_section[key], dtype=int)
+            time_target = np.random.choice(np.arange(trace_section[key]), size=len(is_times), replace=False)
             time_target.sort()
+            
+            # time_list = np.random.dirichlet(np.ones(len(is_times)))
+            # time_list = time_list / np.sum(time_list)
+            # time_target = np.array(time_list * trace_section[key], dtype=int)
+            # if len(set(time_target)) == len(time_target):
+            #     pass
+            # else:
+            #     time_list = np.random.dirichlet(np.ones(len(is_times)))
+            #     time_target = np.array(time_list * trace_section[key], dtype=int)
+            # time_target.sort()
+            
 
         # len(is_times) == 0
         else:
@@ -552,7 +564,7 @@ class AutoGenerator(TraceModule):
 
         return time_target
     
-    def test_random_parameter_generation(self):
+    def default_parameter_generation(self):
         # make parameter dictionary 
         param_list = self.generate_trace_parameter()
 
@@ -561,13 +573,33 @@ class AutoGenerator(TraceModule):
         # generate each length of each trace
         trace_section = self.generate_boundary(trace_length)
 
-        '''
-        default parameter dictionary 만들고
+        # value default parameter generation
+        for key, param in enumerate(param_list):
+            is_values = [v for v in param if 'value' in v]
+            param_value = self.generate_value_parameter(len(is_values), self.mean_profiles[key])
 
-        for loop 안에서 default dict 순회 하면서 jitter, value variance, noise를 추가하면 되지 않을까?
+            # allocate value parameter
+            for v, p in zip(is_values, param_value):
+                param_list[key][v] = p
+        
+        # time default parameter generation
+        for key, param in enumerate(param_list):
+            is_times = [t for t in param if 'time' in t]
+            param_value = self.generate_time_parameter(key, is_times, trace_section)
 
-        gen 부분과 allocation 부분을 어떤 구조로 나누면 좋을까?
-        '''
+            # allocate time parameter
+            if not is_times:
+                pass
+            else:
+                for v, p in zip(is_times, param_value):
+                    param_list[key][v] = p
+
+        # allocate length
+        for key, param in enumerate(param_list):
+            param_list[key]['length'] = trace_section[key]
+
+        return param_list
+    
     def generate_trace_parameter(self):
         param_list = []
         for f in self.function:
@@ -580,29 +612,86 @@ class AutoGenerator(TraceModule):
             #param_list.append(param)
         
         return param_list       
-        
     
+    def generate_random_trace(self):        
+        param = copy.deepcopy(self.param)
+        
+        traces = []
+        for n in range(self.n):
+            step = []
+            for key, f in enumerate(self.function):
+                func = getattr(self, f)
+                
+                # value parameter generation
+                is_values = [v for v in self.param[key] if 'value' in v]
+                for value in is_values:
+                    # std factor random으로 줘야함
+                    param_value = self.generate_value_parameter(1, self.param[key][value], std_factor=0.05)[0]
+                    param[key][value] = param_value
+                
+                # jitter 
+                is_times = [t for t in self.param[key] if 'time' in t]
+                time_values = [self.param[key][v] for v in is_times]
+                    
+                new_length, new_time_values = self.jitter(3, param[key]['length'], *time_values)
+                param[key].update({'length': new_length, **dict(zip(is_times, new_time_values))})
 
-    def test_generat_trace_(self):
-        # generate length
-        trace_length = self.generate_length()
-        # generate each length of each trace
-        trace_section = self.generate_boundary(trace_length)
+                trace_value = func(**param[key])
+                step.append(trace_value)
+            traces.append(step)
+        
+        return self.make_trace_format(*traces)
+    
+    def jitter(self, maximum_point, length, *time):
+        # length jitter factor
+        length_jitter_factor = self.jitter_value_calculation(maximum_point)
+        new_length = length + length_jitter_factor
+        #print(f'length:{length} new_length:{new_length}')
+        # time jitter factor
+        if time:
+            new_time = []
+            for key, t in enumerate(time):
+                time_jitter_factor = self.jitter_value_calculation(maximum_point)
+                new_t = max(0, t + time_jitter_factor)
+                new_time.append(new_t)
 
-        full_param = []
+            new_time.sort()
+            #print(f'time:{time} new_time:{new_time}')
 
-        for key, f in enumerate(self.function):
-            trace_type = getattr(super(), f)
-            param_list = inspect.signature(trace_type).parameters
-            param_list = list(param_list.keys())
+            if max(new_time) >= new_length:
+                new_length = max(new_time) + 1
 
-        return param_list
+            if len(set(new_time)) != len(time):
+                return length, time
+
+            return new_length, new_time
+
+        else:
+            return new_length, []
+    
+    def jitter_value_calculation(self, maximum_point):
+        value = np.random.normal(1)
+        intervals = np.linspace(-3, 3, maximum_point*2+1)
+        jitter_score = list(range(-maximum_point+1, 1)) + list(range(0, maximum_point))
+
+        idx = np.searchsorted(intervals, value, side='right')
+        # less than 3
+        if idx == 0:
+            return jitter_score[0] - 1
+        # grater than 3
+        elif idx == len(intervals):
+            return jitter_score[-1] + 1
+        else:
+            return jitter_score[idx - 1]
 
     def random_parameter_generation(self):
         # generate length
-        trace_length = self.generate_length()
+        self.trace_length = self.generate_length()
+        trace_length = self.trace_length
         # generate each length of each trace
-        trace_section = self.generate_boundary(trace_length)
+        self.trace_section = self.generate_boundary(trace_length)
+        
+        trace_section = self.trace_section
 
         full_param = []
 
@@ -630,7 +719,7 @@ class AutoGenerator(TraceModule):
             param_dict['length'] = trace_section[key]
 
             # time parameter gen
-            time_target = self.generate_time_parameter(is_times, trace_section, key)
+            time_target = self.generate_time_parameter(key, is_times, trace_section)
 
             # allocate time parameter
             if not is_times:
