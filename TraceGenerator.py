@@ -74,7 +74,7 @@ class TraceModule:
         return np.concatenate([start, up_trend, up_stable, down_trend, end])
 
     def triangular(self, start_value, peak_value, end_value, time1, time2, time3, length):
-        start = np.ones(time1)
+        start = np.ones(time1) * start_value
         up_trend = start_value + np.arange(time2 - time1) * (peak_value - start_value) / (time2 - time1)
         peak = np.array([peak_value])
         down_trend = peak_value - np.arange(1, time3 - time2 + 1) * (peak_value - end_value) / (time3 - time2)
@@ -525,7 +525,9 @@ class AutoGenerator(TraceModule):
         length_list = np.random.dirichlet(np.ones(len(self.function)))
         length_list = length_list / np.sum(length_list)
         trace_section = np.array(length_list * trace_length, dtype=int)
-
+        #print(trace_section)
+        # time parameter 는 최대 길이가 4인데, trace section의 길이가 4 미만인 경우와 만나면 에러가 생김 추후 고쳐야함
+        trace_section = np.array([i if i >= 7 else 8 for i in trace_section])
         return trace_section
 
     def generate_value_parameter(self, length, loc_factor, std_factor=0.1):
@@ -544,6 +546,8 @@ class AutoGenerator(TraceModule):
             # print(time_target)
 
         elif len(is_times) > 1:
+            #print(is_times)
+            #print(trace_section[key])
             time_target = np.random.choice(np.arange(trace_section[key]), size=len(is_times), replace=False)
             time_target.sort()
             
@@ -572,6 +576,7 @@ class AutoGenerator(TraceModule):
         trace_length = self.generate_length()
         # generate each length of each trace
         trace_section = self.generate_boundary(trace_length)
+        trace_length = np.sum(trace_section)
 
         # value default parameter generation
         for key, param in enumerate(param_list):
@@ -613,12 +618,13 @@ class AutoGenerator(TraceModule):
         
         return param_list       
     
-    def generate_random_trace(self):        
-        param = copy.deepcopy(self.param)
-        
+    def generate_random_trace(self, return_param=False):        
+        #param = copy.deepcopy(self.param)
+        param_list = []
         traces = []
         for n in range(self.n):
             step = []
+            param = copy.deepcopy(self.param)
             for key, f in enumerate(self.function):
                 func = getattr(self, f)
                 
@@ -638,8 +644,10 @@ class AutoGenerator(TraceModule):
 
                 trace_value = func(**param[key])
                 step.append(trace_value)
+            param_list.append(param)
             traces.append(step)
-        
+        if return_param:
+            return self.make_trace_format(*traces), param_list
         return self.make_trace_format(*traces)
     
     def jitter(self, maximum_point, length, *time):
@@ -783,7 +791,7 @@ class AutoGenerator(TraceModule):
         #fname = p.split(os.sep)[-1].split('.')[0]
         step_list = list(np.sort(np.unique(df.RECIPE_STEP.values)))
         reset_raw_data, boundary_raw = self.reset_index(df, step_list, True)
-        print(boundary_raw)
+        #print(boundary_raw)
         self.index_sorted_image(reset_raw_data, boundary_raw)
 
     def reset_index(self, trace, step_list, return_recipe_step_boundary=False):
