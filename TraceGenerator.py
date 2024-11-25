@@ -812,10 +812,6 @@ class AutoGenerator_original(TraceModule):
        
     def make_trace_format(self, *args):
         # make recipe step indices only in nonfocus cases
-        
-        col = ['Tool/Chamber', 'Tool', 'chamber', 'Process_Recipe', 'Start_Time',
-               'Carrier_ID', 'WAFER_ID', 'Slot']
-
         col = ['LOT_ID', 'WAFER_ID', 'PROCESS', 'PROCESS_STEP', 'RECIPE', 'RECIPE_STEP', 'PARAMETER_NAME',
                'PARAMETER_VALUE', 'TIME']
         
@@ -895,7 +891,7 @@ class AutoGenerator_original(TraceModule):
         else:
             mark = None
         for wafer in reset_raw_data:
-            plt.plot(wafer.PARAMETER_VALUE, label=None, marker=mark)
+            plt.plot(wafer.PARAMETER_VALUE, label=None, marker=mark, markersize=2)
             
         for i in boundary_raw:
             plt.axvline(i, linestyle='--', alpha=0.3, color='black')
@@ -1084,7 +1080,7 @@ class AutoGenerator(TraceModule):
                 step = []
                 #param = copy.deepcopy(self.param)
                 self.function = self.function_lists[i]
-                print(self.function)
+                #print(self.function)
                 param = self.default_parameter_generation()
                 # # jitter 
                 # is_times = [t for t in param[key] if 'time' in t]
@@ -1106,8 +1102,8 @@ class AutoGenerator(TraceModule):
                     trace_value = func(**param[key])
                     step.append(trace_value)
                 step = np.concatenate(step)
-                plt.plot(step)
-                plt.show()
+                #plt.plot(step)
+                #plt.show()
                 parameter.append(step)
             parameter = np.concatenate(parameter)
             #parameter = parameter.transpose()
@@ -1295,7 +1291,8 @@ class AutoGenerator(TraceModule):
 
         return data
        
-    def make_trace_format(self, chamber=1, *args):
+    def make_trace_format(self, *args):
+        chamber = 1
         # make recipe step indices only in nonfocus cases
         
         col = ['Tool/Chamber', 'Tool', 'chamber', 'Process_Recipe', 'Start_Time',
@@ -1312,21 +1309,22 @@ class AutoGenerator(TraceModule):
         for key, wafer in enumerate(args):
             df = pd.DataFrame([], columns=col)
             df[para_col] = wafer
-            df['Tool/Chamber'] = f'EP00018/PM-{chamber}]'
+            df['Tool/Chamber'] = f'EP00018/PM-{chamber}'
             df['Tool'] = 'EP00018'
             df['chamber'] = f'PM-{chamber}'
             df['Process_Recipe'] = 'Process Recipe'
-            df['Carrier_ID'] = ''
-            df['WAFER_ID'] = ''
-            df['Slot']  = ''
+            df['Carrier_ID'] = 'PFP00731'
+            df['WAFER_ID'] = f'PFP00731.{key}'
+            df['Slot']  = f'{key}'
             # step_list = []
             # for step_num, step in enumerate(single):
             #     recipe_step = [str(step_num+1)] * len(step)
             #     step_list.extend(recipe_step)
-            df['RECIPE_STEP'] = [str(step_num+1) for step_num, step in enumerate(trace) for _ in step]
+            #df['Recipe_Step'] = [str(step_num+1) for step_num, step in enumerate(wafer) for _ in step]
             data.append(df)
+        
         data = pd.concat(data)
-        data['TIME'] = pd.date_range("2024-01-01", periods=data.shape[0], freq="S")
+        data['Start_Time'] = pd.date_range("2024-01-01", periods=data.shape[0], freq="0.1S")
 
         return data
 
