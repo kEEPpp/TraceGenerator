@@ -3,6 +3,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+def show_generated_para(df):
+    wafer_list = df['WAFER_ID'].unique()
+    para_col = [col for col in df.columns if 'para' in col]
+    image_col = 4
+    
+    for key, para in enumerate(para_col):
+        for wafer in wafer_list:
+            new = df.groupby('WAFER_ID').get_group(wafer)
+            if (key % image_col == 0) and (wafer == wafer_list[0]):
+                fig, ax = plt.subplots(1, image_col, figsize=(24,4))
+            idx = key % 4
+            ax[idx].plot(new[para])
+            ax[idx].set_title(f'{para}')
+        
+            if (idx % image_col == image_col-1) and (wafer_list[-1] == wafer):
+                plt.show()
+
+
 def reset_index(trace, step_list, return_recipe_step_boundary=False):
     full_trace_list = []
     for i in trace['WAFER_ID'].unique():
