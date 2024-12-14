@@ -715,14 +715,17 @@ class AutoGenerator(TraceModule):
                 new_t = max(0, t + time_jitter_factor)
                 new_time.append(new_t)
 
+
             new_time.sort()
             #print(f'time:{time} new_time:{new_time}')
+
 
             if max(new_time) >= new_length:
                 new_length = max(new_time) + 1
 
             if len(set(new_time)) != len(time):
                 return length, time
+
 
             return new_length, new_time
 
