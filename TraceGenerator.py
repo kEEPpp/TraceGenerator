@@ -321,7 +321,6 @@ class TraceDataGeneration(TraceModule):
         if fault_type == 'spike':
             spike_level = std * fault_level
             peak_time = random.randint(0, int(param_dict['length'] * 0.9))
-
             trace[peak_time] += spike_level
             return trace
 
@@ -379,7 +378,7 @@ class TraceDataGeneration(TraceModule):
             df = df.reset_index(drop=True)
             df['LOT_ID'] = 'lot_a'
             if self.fault_flag:
-                df['WAFER_ID'] = f'wafer{len(self.param_list)+1}'
+                df['WAFER_ID'] = f'wafer{len(self.param_list)+1+n}'
             else:
                 df['WAFER_ID'] = f'wafer{n + 1}' # focus data 항상 n+1 이 부분 변경
             df['PROCESS'] = 'process'
@@ -394,7 +393,7 @@ class TraceDataGeneration(TraceModule):
             data.append(df)
 
         data = pd.concat(data)
-        data['TIME'] = pd.date_range("2024-01-01", periods=data.shape[0], freq="S")
+        data['TIME'] = pd.date_range("2024-01-01", periods=data.shape[0], freq="0.1s")
         temp_list = []
         for wafer in data['WAFER_ID'].unique():
             temp_list.append(data[data['WAFER_ID'] == wafer])
